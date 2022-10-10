@@ -1,0 +1,246 @@
+---
+output: github_document
+---
+
+<!-- README.md is generated from README.Rmd. Please edit that file -->
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  cache = TRUE
+)
+```
+
+# dfttraffic
+
+<!-- badges: start -->
+<!-- badges: end -->
+
+The goal of dfttraffic is to explore DfT's road traffic datasets.
+
+
+```{r getdata, message=FALSE}
+library(tidyverse)
+library(tidymodels)
+```
+
+```{r}
+u_data_raw = "https://storage.googleapis.com/dft-statistics/road-traffic/downloads/data-gov-uk/dft_traffic_counts_raw_counts.zip"
+f = basename(u_data_raw)
+if(!file.exists(f)) {
+  download.file(url = u_data_raw, destfile = f)
+}
+```
+
+```{r}
+raw_traffic_data = readr::read_csv("dft_traffic_counts_raw_counts.csv")
+dim(raw_traffic_data)
+```
+
+
+```{r}
+raw_traffic_data
+```
+
+The code above shows we have 4.7 million rows of data.
+
+A logical starting point is to plot the mean flows for each major mode of transport each year.
+This is done below.
+
+```{r}
+raw_traffic_mean_year = raw_traffic_data |>
+  group_by(Year) |> 
+  summarise(across(.cols = matches("Ped|Car|All|LGV"), mean, na.rm = TRUE)) |> 
+  pivot_longer(cols = -Year, names_to = "Mode", values_to = "Count")
+raw_traffic_mean_year |> 
+  ggplot(aes(Year, Count, colour = Mode)) +
+  geom_line()
+```
+
+On their own, these results do not mean much: changes in counter locations accounted for more of the variability than actual changes in traffic.
+Disaggregating the results by road type leads to the following:
+
+```{r}
+raw_traffic_mean_year = raw_traffic_data |>
+  group_by(Year, Road_type) |> 
+  summarise(across(.cols = matches("Ped|Car|All|LGV"), mean, na.rm = TRUE)) |> 
+  pivot_longer(cols = c(-Year, -Road_type), names_to = "Mode", values_to = "Count")
+raw_traffic_mean_year |> 
+  ggplot(aes(Year, Count, colour = Mode)) +
+  geom_line() +
+  facet_wrap(~Road_type, scales = "free")
+```
+
+
+
+```{r}
+raw_traffic_mean_year = raw_traffic_data |>
+  group_by(Year, Road_type) |> 
+  summarise(across(.cols = matches("Ped|Car|All|LGV"), mean, na.rm = TRUE)) |> 
+  pivot_longer(cols = c(-Year, -Road_type), names_to = "Mode", values_to = "Count")
+raw_traffic_mean_year |> 
+  ggplot(aes(Year, Count, colour = Mode)) +
+  geom_line() +
+  facet_wrap(~Road_type, scales = "free")
+```
+
+We will remove records with no estimates for motor vehicles:
+
+```{r}
+traffic_data_no_na = raw_traffic_data |> 
+  filter(!is.na(All_motor_vehicles))
+```
+
+
+Let's exclude count points that only appear than n times or less to remove the impact of points that are only used once.
+
+```{r}
+traffic_data_n_years = traffic_data_no_na |> 
+  group_by(Count_point_id, Direction_of_travel) |> 
+  mutate(
+    year_number = length(unique(Year)),
+    first_year = min(Year),
+    last_year = max(Year)
+    )
+traffic_data_n_years |> 
+  select(matches("year")) |> 
+  summary()
+```
+
+```{r}
+traffic_data_n_years |> 
+  filter(year_number == 22) |> 
+  group_by(Year, Road_type) |> 
+  summarise(across(.cols = matches("Ped|Car|All|LGV"), mean, na.rm = TRUE)) |> 
+  pivot_longer(cols = c(-Year, -Road_type), names_to = "Mode", values_to = "Count") |> 
+  ggplot(aes(Year, Count, colour = Mode)) +
+  geom_line() +
+  facet_wrap(~Road_type, scales = "free")
+```
+
+
+```{r}
+traffic_data_n_years_near_full = traffic_data_n_years |> 
+  filter(Year >= 2009) |> 
+    group_by(Count_point_id, Direction_of_travel) |> 
+  mutate(
+    year_number = length(unique(Year)),
+    first_year = min(Year),
+    last_year = max(Year)
+    ) |> 
+  # filter(year_number >= 12) |> # full sample
+  filter(year_number >= 11) # near full sample
+table(traffic_data_n_years_near_full$Road_type) # 284k minor records
+
+traffic_data_n_years_near_full |> 
+  group_by(Year, Road_type) |> 
+  summarise(across(.cols = matches("Ped|Car|All|LGV"), mean, na.rm = TRUE)) |> 
+  pivot_longer(cols = c(-Year, -Road_type), names_to = "Mode", values_to = "Count") |> 
+  ggplot(aes(Year, Count, colour = Mode)) +
+  geom_line() +
+  facet_wrap(~Road_type, scales = "free") +
+  scale_x_continuous(breaks = c(2010, 2015, 2020))
+```
+
+
+Bayesian estimate of change in traffic over time https://journal.r-project.org/archive/2018/RJ-2018-017/RJ-2018-017.pdf
+
+```{r, eval=FALSE}
+traffic_data_sample = traffic_data_no_na |> 
+  sample_n(100)
+traffic_grouped_sample = traffic_data_no_na |> 
+  filter(Count_point_id %in% traffic_data_sample$Count_point_id)
+library(brms)
+fit = traffic_grouped_sample |> 
+  brm(All_motor_vehicles ~ Year + (1 | Count_point_id), data = _)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<!-- Given the variability in site locations, it makes sense to compare change in traffic levels against predictions that exclude time. -->
+<!-- Let's do this for all motor vehicles first, with [{tidymodels}](https://www.tidymodels.org/learn/models/parsnip-ranger-glmnet/) providing an interface to the {ranger} package: -->
+
+```{r, eval=FALSE, echo=FALSE}
+set.seed(2022)
+traffic_data_no_na = raw_traffic_data |> 
+  filter(!is.na(All_motor_vehicles))
+traffic_data_sample = traffic_data_no_na |> 
+  sample_n(100000)
+rf_defaults = rand_forest(mode = "regression")
+# dput(names(raw_traffic_data))
+preds = c("hour", "Local_authority_name", "Road_category", "Road_type"
+          # , "Link_length_km" # contains missing variables
+          )
+show_engines("rand_forest")
+```
+
+
+```{r, eval=FALSE, echo=FALSE}
+system.time({
+rf_fit = rf_defaults |> 
+  set_engine("ranger") |> 
+  fit_xy(
+    x = traffic_data_sample[preds],
+    y = traffic_data_sample$All_motor_vehicles
+  )
+})
+ #   user  system elapsed 
+ # 15.462   0.103  15.517
+write_rds(rf_fit, "rf_fit.Rds")
+```
+
+```{r, eval=FALSE, echo=FALSE}
+rf_fit = readRDS("rf_fit.Rds")
+rf_fit
+```
+
+```{r, echo=FALSE, eval=FALSE}
+fs::file_size("rf_fit.Rds")
+```
+
+That shows that a model that excludes time and location is pretty good: just contextual variables can explain 65% of variability in results.
+We will predict the number of motor vehicles on a random sample of records to generate a measure of goodness of fit:
+
+```{r, eval=FALSE, echo=FALSE}
+traffic_data_sample2 = traffic_data_no_na |> 
+  sample_n(100000)
+test_result = traffic_data_no_na |> 
+  bind_cols(
+    predict(rf_fit, new_data = traffic_data_no_na[preds])
+  )
+test_result
+test_result %>% metrics(truth = All_motor_vehicles, estimate = .pred) 
+```
+
+```{r, eval=FALSE, echo=FALSE}
+# Showed same decrease
+test_result = test_result |> 
+  mutate(residual = All_motor_vehicles - .pred)
+test_result_mean_year = test_result |>
+  group_by(Year, Road_type) |> 
+  summarise(across(.cols = matches("resi"), mean, na.rm = TRUE)) |> 
+  pivot_longer(cols = c(-Year, -Road_type), names_to = "Mode", values_to = "Count")
+test_result_mean_year |> 
+  ggplot(aes(Year, Count, colour = Mode)) +
+  geom_line() +
+  facet_wrap(~Road_type, scales = "free")
+```
+
+

@@ -1,0 +1,5 @@
+.Rproj.user/
+*cache*
+*.csv
+*.zip
+*.Rds
