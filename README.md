@@ -194,19 +194,67 @@ traffic_data_n_years_near_full |>
 
 ![](README_files/figure-gfm/unnamed-chunk-11-1.png)<!-- -->
 
-Bayesian estimate of change in traffic over time
-<https://journal.r-project.org/archive/2018/RJ-2018-017/RJ-2018-017.pdf>
+The problem is still that non-random sampling could affect the results.
+Even though only 1 observation is missing over the 12 year period shown
+above, if there is a relationship between the volume of traffic on roads
+and when the record was missing, this could influence the results.
+
+To deal with this a simple approach is to look at *relative change* in
+traffic volumes over time. We will set the level of traffic in the first
+year of observations to 1 and calculate relative change since then.
+Including only count points that had an observation during 2000 leads to
+the following:
 
 ``` r
-traffic_data_sample = traffic_data_no_na |> 
-  sample_n(100)
-traffic_grouped_sample = traffic_data_no_na |> 
-  filter(Count_point_id %in% traffic_data_sample$Count_point_id)
-library(brms)
-fit = traffic_grouped_sample |> 
-  brm(All_motor_vehicles ~ Year + (1 | Count_point_id), data = _)
+traffic_data_relative = traffic_data_no_na |> 
+  group_by(Count_point_id) |> 
+  mutate(All_motor_vehicles_relative = All_motor_vehicles / mean(All_motor_vehicles))
+traffic_data_relative |> 
+  group_by(Year, Road_type) |> 
+  summarise(across(.cols = matches("rel"), mean, na.rm = TRUE)) |> 
+  pivot_longer(cols = c(-Year, -Road_type), names_to = "Mode", values_to = "Count") |> 
+  ggplot(aes(Year, Count, colour = Mode)) +
+  geom_line() +
+  facet_wrap(~Road_type, scales = "free") +
+  scale_x_continuous(breaks = c(2010, 2015, 2020))
+#> `summarise()` has grouped output by 'Year'. You can override using the
+#> `.groups` argument.
 ```
 
+![](README_files/figure-gfm/unnamed-chunk-12-1.png)<!-- -->
+
+The results presented above represent an improvement on absolute counts,
+but they are still affected by changes in sampling locations: sample
+points that started after 2000 ‘reset’ to an average value of 1,
+bringing the estimates down compared with their true value.
+
+To overcome this issue, let’s make all relative values for the first
+year the same, and plot the results for all counters that had at least 1
+observation in 2000:
+
+``` r
+year = 2000
+traffic_data_starting_year = traffic_data_relative |> 
+  group_by(Count_point_id) |> 
+  filter(min(Year) == year)
+nrow(traffic_data_starting_year) / nrow(traffic_data_relative)
+#> [1] 0.3329791
+
+traffic_data_starting_year |> 
+  group_by(Year, Road_type) |> 
+  summarise(across(.cols = matches("rel"), mean, na.rm = TRUE)) |> 
+  pivot_longer(cols = c(-Year, -Road_type), names_to = "Mode", values_to = "Count") |> 
+  ggplot(aes(Year, Count, colour = Mode)) +
+  geom_line() +
+  facet_wrap(~Road_type, scales = "free") +
+  scale_x_continuous(breaks = c(2010, 2015, 2020))
+#> `summarise()` has grouped output by 'Year'. You can override using the
+#> `.groups` argument.
+```
+
+![](README_files/figure-gfm/unnamed-chunk-13-1.png)<!-- -->
+
+<!-- Bayesian estimate of change in traffic over time https://journal.r-project.org/archive/2018/RJ-2018-017/RJ-2018-017.pdf -->
 <!-- Given the variability in site locations, it makes sense to compare change in traffic levels against predictions that exclude time. -->
 <!-- Let's do this for all motor vehicles first, with [{tidymodels}](https://www.tidymodels.org/learn/models/parsnip-ranger-glmnet/) providing an interface to the {ranger} package: -->
 
