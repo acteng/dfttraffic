@@ -76,13 +76,13 @@ raw_traffic_mean_year |>
 
 ```{r}
 raw_traffic_mean_year = raw_traffic_data |>
-  group_by(Year, Road_type) |> 
+  group_by(Year, Road_type, Direction_of_travel) |> 
   summarise(across(.cols = matches("Ped|Car|All|LGV"), mean, na.rm = TRUE)) |> 
-  pivot_longer(cols = c(-Year, -Road_type), names_to = "Mode", values_to = "Count")
+  pivot_longer(cols = c(-Year, -Road_type, -Direction_of_travel), names_to = "Mode", values_to = "Count")
 raw_traffic_mean_year |> 
   ggplot(aes(Year, Count, colour = Mode)) +
   geom_line() +
-  facet_wrap(~Road_type, scales = "free")
+  facet_wrap(~Road_type + Direction_of_travel, scales = "free")
 ```
 
 We will remove records with no estimates for motor vehicles:
@@ -172,22 +172,26 @@ To overcome this issue, let's make all relative values for the first year the sa
 ```{r}
 year = 2000
 traffic_data_starting_year = traffic_data_relative |> 
-  group_by(Count_point_id) |> 
   filter(min(Year) == year)
 nrow(traffic_data_starting_year) / nrow(traffic_data_relative)
 
 traffic_data_starting_year |> 
   group_by(Year, Road_type) |> 
   summarise(across(.cols = matches("rel"), mean, na.rm = TRUE)) |> 
+  group_by(Road_type) |> 
+  mutate(All_motor_vehicles_relative = All_motor_vehicles_relative / All_motor_vehicles_relative[1]) |> 
   pivot_longer(cols = c(-Year, -Road_type), names_to = "Mode", values_to = "Count") |> 
   ggplot(aes(Year, Count, colour = Mode)) +
   geom_line() +
-  facet_wrap(~Road_type, scales = "free") +
+  facet_wrap(~Road_type) +
   scale_x_continuous(breaks = c(2010, 2015, 2020))
 ```
 
 
 
+```{r}
+
+```
 
 
 

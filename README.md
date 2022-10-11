@@ -98,15 +98,15 @@ raw_traffic_mean_year |>
 
 ``` r
 raw_traffic_mean_year = raw_traffic_data |>
-  group_by(Year, Road_type) |> 
+  group_by(Year, Road_type, Direction_of_travel) |> 
   summarise(across(.cols = matches("Ped|Car|All|LGV"), mean, na.rm = TRUE)) |> 
-  pivot_longer(cols = c(-Year, -Road_type), names_to = "Mode", values_to = "Count")
-#> `summarise()` has grouped output by 'Year'. You can override using the
-#> `.groups` argument.
+  pivot_longer(cols = c(-Year, -Road_type, -Direction_of_travel), names_to = "Mode", values_to = "Count")
+#> `summarise()` has grouped output by 'Year', 'Road_type'. You can override using
+#> the `.groups` argument.
 raw_traffic_mean_year |> 
   ggplot(aes(Year, Count, colour = Mode)) +
   geom_line() +
-  facet_wrap(~Road_type, scales = "free")
+  facet_wrap(~Road_type + Direction_of_travel, scales = "free")
 ```
 
 ![](README_files/figure-gfm/unnamed-chunk-7-1.png)<!-- -->
@@ -235,7 +235,6 @@ observation in 2000:
 ``` r
 year = 2000
 traffic_data_starting_year = traffic_data_relative |> 
-  group_by(Count_point_id) |> 
   filter(min(Year) == year)
 nrow(traffic_data_starting_year) / nrow(traffic_data_relative)
 #> [1] 0.3329791
@@ -243,10 +242,12 @@ nrow(traffic_data_starting_year) / nrow(traffic_data_relative)
 traffic_data_starting_year |> 
   group_by(Year, Road_type) |> 
   summarise(across(.cols = matches("rel"), mean, na.rm = TRUE)) |> 
+  group_by(Road_type) |> 
+  mutate(All_motor_vehicles_relative = All_motor_vehicles_relative / All_motor_vehicles_relative[1]) |> 
   pivot_longer(cols = c(-Year, -Road_type), names_to = "Mode", values_to = "Count") |> 
   ggplot(aes(Year, Count, colour = Mode)) +
   geom_line() +
-  facet_wrap(~Road_type, scales = "free") +
+  facet_wrap(~Road_type) +
   scale_x_continuous(breaks = c(2010, 2015, 2020))
 #> `summarise()` has grouped output by 'Year'. You can override using the
 #> `.groups` argument.
